@@ -44,7 +44,6 @@ namespace Fruktstand.Game
         public const float RingHelpRadius = 0.08f; // a ring released this close to the peg (horizontally) goes onto it
 
         static bool OnRoad(Ware toy) => toy is Ware.Car or Ware.Train;
-        static bool Stacks(Ware toy) => toy is Ware.Blocks or Ware.StackingRings;
         static float RoadLift(Ware toy) => toy == Ware.Train ? TrainSize.y / 2 + 0.009f : Models.CarSize.y / 2 + 0.019f;
         public static readonly Vector3 TidyButton = new(0.05f, 0.03f, -0.29f);
         // EPIC-006: the crocodile's own little shelf on the table's end by the candy stall (player's side), level with
@@ -113,24 +112,10 @@ namespace Fruktstand.Game
             public Item Carried;           // the very toy bought, until it is put on the table
             public readonly List<Item> Toys = new();
             public bool Placed;
-            public float Rest, Wait, Act;
-            public float RoadT;
-            public bool Fetching, Gliding;
-            public Transform Peg;          // the stacking rings' fixed peg (EPIC-010)
+            public float Rest;             // the player's release lying still (and the ball's own wait before a roll)
             public int Variant;            // EPIC-015: the figure's look, carried on into the park
             public bool WentHome;          // EPIC-015: walked away from the table (Leaving), not cleared
-            public float SpinLeft;         // the top spins while > 0 (EPIC-010)
-            public bool Tossed;            // EPIC-017: the ball is in a toss's arc (no air damping)
-            public float TossTime, TossFlight;
-            public float HoldLeft;         // EPIC-017: the child holds the ball it caught
-            public BuildSite Site;         // EPIC-017: the blocks' shared building site
-            public readonly HashSet<Item> PlayerTouched = new(); // EPIC-017: blocks the child never moves
-            public FrogPond Pond;          // EPIC-018: the frogs (PlayTableView.Frogs.cs)
-            public readonly Item[] Frog = new Item[2], Rear = new Item[2]; // by FrogOwner
-            public readonly bool[] PlayerPressing = new bool[2];
-            public readonly float[] SinceLanding = new float[2], FallTime = new float[2];
-            public float ChildPressLeft, RippleTime;
-            public Transform PondParts, Ripple;
+            public ToyPlay Play;           // what only this toy does (PlayTableView.<Toy>.cs)
         }
 
         readonly Art art;
@@ -295,27 +280,8 @@ namespace Fruktstand.Game
             foreach (var t in c.Toys) yield return t;
         }
 
-        public bool Spinning(Ware toy) => ChildOf(toy)?.SpinLeft > 0;
-        public bool HasPeg(Ware toy) => ChildOf(toy)?.Peg != null;
-
-        public int RingsOnPeg
-        {
-            get
-            {
-                var c = ChildOf(Ware.StackingRings);
-                if (c == null) return 0;
-                var n = 0;
-                foreach (var t in c.Toys) if (t.Slot >= 0) n++;
-                return n;
-            }
-        }
-
-        // EPIC-017: tossed balls the child has caught (since the table was built), and the shared building site.
+        // EPIC-017: tossed balls the child has caught (since the table was built).
         public int BallCatches { get; private set; }
-        public BuildSite Build => ChildOf(Ware.Blocks)?.Site;
-
-        // EPIC-017: the first half of the set is the child's (on the child's side), the rest the player's.
-        public static bool IsChildsBlock(int index) => index < WareInfo.BlocksInSet / 2;
 
         // EPIC-016: where the children are (world), walking to the table, playing or leaving: the figures on the paths
         // keep their distance to them as to someone standing (the children's walk is timed by Core.PlayArea).
@@ -348,6 +314,7 @@ namespace Fruktstand.Game
             c.Stool = art.Part(root, "Stool", art.Cylinder, art.Matte(new Color(0.75f, 0.85f, 1f)), ChildSpot(toy), Vector3.one);
             c.Stool.gameObject.SetActive(false);
             c.Carry = art.Group(c.Root, "Carry", new Vector3(0, 0.5f, -0.14f));
+            c.Play = ToyPlay.For(this, c);
             if (bought != null)
             {
                 bought.Place = ItemPlace.Carried;
@@ -390,7 +357,11 @@ namespace Fruktstand.Game
                         c.Figure.SetMood(Mood.Happy);
                         break;
                     case SpotState.Playing:
-                        if (!c.Placed) PutOnTable(toy, c);
+                        if (!c.Placed)
+                        {
+                            c.Placed = true;
+                            c.Play.PutOnTable();
+                        }
                         var lift = SeatLift;
                         c.Stool.gameObject.SetActive(lift > 0.02f);
                         c.Stool.localPosition = spot + Vector3.up * (lift / 2);
@@ -398,16 +369,14 @@ namespace Fruktstand.Game
                         c.Root.localPosition = spot + Vector3.up * (lift + Mathf.Sin(clock * 2) * 0.004f);
                         Face(c, Vector3.back);
                         c.Figure.SetMood(area.Control(toy) == ToyControl.Player ? Mood.Neutral : Mood.Happy); // waits kindly
-                        c.Site?.Tick(dt, AnyToyHeld(toy)); // EPIC-017: the player's turn waits while a block is held
-                        if (toy == Ware.Ball) BallInFlight(area, c, dt);
-                        if (toy == Ware.Frogs && c.Pond != null) FrogStep(c, dt);
+                        c.Play.Tick(area, dt);
                         Play(area, toy, c, dt);
                         break;
                     case SpotState.Leaving:
                         if (area.Control(toy) == ToyControl.Player) break; // never take a toy out of the player's hand
                         c.Stool.gameObject.SetActive(false);
                         foreach (var t in c.Toys) if (t.Place != ItemPlace.Held) t.Transform.gameObject.SetActive(false);
-                        if (c.Peg != null) c.Peg.gameObject.SetActive(false);
+                        c.Play.Leaving();
                         var l = Mathf.Clamp01(area.StateTime(toy) / PlayArea.LeaveSeconds);
                         c.WentHome = l > 0.5f; // the rules may free the spot in the same tick the walk ends
                         c.Root.localPosition = spot + new Vector3(0, 0, l * LeaveDistance);
@@ -426,76 +395,6 @@ namespace Fruktstand.Game
         {
             dir.y = 0;
             if (dir.sqrMagnitude > 1e-4f) c.Root.localRotation = Quaternion.LookRotation(-dir); // the figure's face is -z
-        }
-
-        void PutOnTable(Ware toy, Child c)
-        {
-            c.Placed = true;
-            if (toy == Ware.Frogs)
-            {
-                PutFrogsOnTable(c); // EPIC-018
-                return;
-            }
-            if (toy == Ware.Blocks)
-            {
-                // The little set the child carried becomes six full-size blocks in the building corner.
-                if (c.Carried != null) Remove(c.Carried);
-                c.Carried = null;
-                c.Site = new BuildSite(BuildSpot, Models.BlockSize);
-                for (var i = 0; i < WareInfo.BlocksInSet; i++)
-                {
-                    var b = Item.ForToy(Models.Block(art, top, i), Ware.Blocks, Models.BlockSize * 0.8f);
-                    b.Index = i;
-                    b.Slot = -1; // not in the tower
-                    b.Transform.localPosition = BlockPile(i);
-                    AddBody(b, new Vector3(Models.BlockSize, Models.BlockSize, Models.BlockSize), 0.05f, 0.5f, 0.1f);
-                    items.Add(b);
-                    c.Toys.Add(b);
-                }
-                sounds.Pop();
-                return;
-            }
-            if (toy == Ware.StackingRings)
-            {
-                // The little set the child carried becomes a fixed peg and three full-size rings (EPIC-010).
-                if (c.Carried != null) Remove(c.Carried);
-                c.Carried = null;
-                c.Peg = Models.RingPeg(art, top);
-                c.Peg.localPosition = RingSpot;
-                for (var i = 0; i < WareInfo.RingsInSet; i++)
-                {
-                    var r = Item.ForToy(Models.Ring(art, top, i), Ware.StackingRings, Models.RingRadius * Models.RingScale[i]);
-                    r.Index = i;
-                    r.Slot = -1; // not on the peg
-                    r.Transform.localPosition = RingPile(i);
-                    var k = Models.RingScale[i];
-                    AddBody(r, new Vector3(Models.RingRadius * 2 * k, Models.RingThickness * k, Models.RingRadius * 2 * k), 0.04f, 0.6f, 0.3f);
-                    items.Add(r);
-                    c.Toys.Add(r);
-                }
-                sounds.Pop();
-                return;
-            }
-            // The same ball, top, car or train the child carried from the shop.
-            var item = c.Carried;
-            c.Carried = null;
-            if (item == null) return;
-            items.Remove(item);
-            var radius = toy == Ware.Ball ? Models.BallRadius : toy == Ware.Top ? Models.Radius(Ware.Top) : 0.07f;
-            var t = Item.ForToy(item.Transform, toy, radius);
-            t.Transform.SetParent(top, true);
-            t.Transform.localScale = Vector3.one;
-            t.Transform.SetLocalPositionAndRotation(Home(toy), OnRoad(toy) ? RoadRotation(0.75f) : Quaternion.identity);
-            switch (toy)
-            {
-                case Ware.Ball: AddBall(t); break;
-                case Ware.Top: AddBody(t, TopSize, 0.1f, 0.4f, 0.5f, freezeTilt: true); break; // stands on its point
-                case Ware.Train: AddBody(t, TrainSize, 0.25f, 0.03f, 0.6f, freezeTilt: true); break;
-                default: AddBody(t, Models.CarSize + new Vector3(0, 0.02f, 0), 0.2f, 0.03f, 0.6f, freezeTilt: true); break; // rolls on its wheels: low friction
-            }
-            items.Add(t);
-            c.Toys.Add(t);
-            c.RoadT = 0.75f;
         }
 
         // EPIC-011: an overlap is pushed apart gently, and nothing spins wildly.
@@ -558,243 +457,16 @@ namespace Fruktstand.Game
             {
                 c.Rest = 0;
                 area.ToyAtRest(toy);
-                c.Gliding = OnRoad(toy);
-                if (toy == Ware.Top && OnTable(c.Toys[0])) StartSpin(c); // put down on the table: it spins up again
+                c.Play.AtRest();
                 mine = area.ChildMayAct(toy);
             }
-            if (!mine) return;
-            switch (toy)
-            {
-                case Ware.Ball: PlayBall(c, dt); break;
-                case Ware.Car: PlayCar(c, dt, CarSpeed); break;
-                case Ware.Train: PlayCar(c, dt, TrainSpeed); break;
-                case Ware.Top: PlayTop(c, dt); break;
-                case Ware.StackingRings: PlayRings(c, dt); break;
-                case Ware.Frogs: PlayFrogs(c); break;
-                default: PlayBlocks(c); break;
-            }
-        }
-
-        // EPIC-017: a tossed ball flies without air damping; one that comes near the child's hands is caught.
-        void BallInFlight(PlayArea area, Child c, float dt)
-        {
-            if (!c.Tossed) return;
-            var ball = c.Toys[0];
-            c.TossTime += dt;
-            var near = Vector3.Distance(top.InverseTransformPoint(ball.Position), CatchPoint) < CatchRadius;
-            if (near && area.Control(Ware.Ball) == ToyControl.Free)
-            {
-                EndToss(c);
-                ball.Body.isKinematic = true;
-                ball.Transform.localPosition = CatchPoint;
-                area.ToyAtRest(Ware.Ball); // caught: the child has it
-                c.HoldLeft = CatchHoldSeconds;
-                c.Rest = 0;
-                c.Wait = 0;
-                BallCatches++;
-                c.Figure.Wave(-45);
-                sounds.Pop();
-                Debug.Log($"[Fruktstand] ball caught ({BallCatches})");
-            }
-            else if (c.TossTime > c.TossFlight + 0.4f) EndToss(c);
-        }
-
-        static void EndToss(Child c)
-        {
-            if (!c.Tossed) return;
-            c.Tossed = false;
-            c.Toys[0].Body.linearDamping = BallDamping;
-        }
-
-        const float RollAfterSeconds = 0.8f; // the ball lies still this long before the child rolls it
-
-        void PlayBall(Child c, float dt)
-        {
-            var ball = c.Toys[0];
-            if (c.HoldLeft > 0)
-            {
-                // Holds the caught ball a moment, puts it in the ball corner and rolls it back at once.
-                c.HoldLeft -= dt;
-                if (c.HoldLeft > 0) return;
-                Fetch(c, ball, BallHome);
-                var arrived = ball.OnArrive;
-                ball.OnArrive = () =>
-                {
-                    arrived?.Invoke();
-                    c.Rest = RollAfterSeconds;
-                };
-                return;
-            }
-            if (ball.Moving || c.Fetching) return;
-            var local = top.InverseTransformPoint(ball.Position);
-            var speed = ball.Body.linearVelocity.magnitude;
-            if (speed > RestSpeed) { c.Rest = 0; c.Wait = 0; return; }
-            c.Rest += dt;
-            if (c.Rest < RollAfterSeconds) return;
-            if (local.z > 0.02f && Vector3.Distance(local, BallHome) < 0.14f)
-            {
-                // Roll it over the table to the player's side.
-                var dir = (BallTarget - local).normalized;
-                ball.Body.linearVelocity = top.TransformDirection(dir) * ChildPushSpeed;
-                c.Figure.Wave(-30);
-                sounds.Tick();
-                c.Rest = 0;
-                c.Wait = 0;
-                return;
-            }
-            // On the child's half but out of reach, or waiting on the player's side for a long time: fetch it.
-            c.Wait += dt;
-            if (local.z > 0.02f || c.Wait > FetchAfterSeconds) Fetch(c, ball, BallHome);
-        }
-
-        // EPIC-010: the child sets the top spinning; it slows down, rests a moment and is spun again.
-        void PlayTop(Child c, float dt)
-        {
-            var spinner = c.Toys[0];
-            if (spinner.Moving) return;
-            if (c.SpinLeft > 0)
-            {
-                c.SpinLeft -= dt;
-                var speed = 900f * Mathf.Clamp01(c.SpinLeft / SpinSeconds) + 120f; // degrees per second
-                var wobble = 3f * Mathf.Clamp01(1 - c.SpinLeft / SpinSeconds);
-                var yaw = spinner.Transform.localEulerAngles.y + speed * dt;
-                spinner.Transform.localRotation = Quaternion.Euler(wobble * Mathf.Sin(yaw * 0.05f), yaw, wobble * Mathf.Cos(yaw * 0.05f));
-                if (c.SpinLeft <= 0)
-                {
-                    spinner.Transform.localRotation = Quaternion.Euler(0, yaw, 0);
-                    spinner.Body.isKinematic = false;
-                    c.Act = 0;
-                }
-                return;
-            }
-            c.Act += dt;
-            if (c.Act < SpinRestSeconds || !OnTable(spinner)) return; // off the table: the lost-toy rule brings it back first
-            StartSpin(c);
-            c.Figure.Wave(-20);
-            sounds.Tick();
-        }
-
-        void StartSpin(Child c)
-        {
-            var spinner = c.Toys[0];
-            spinner.Body.isKinematic = true; // turns in place on its point
-            c.SpinLeft = SpinSeconds;
+            if (mine) c.Play.Play(dt);
         }
 
         bool OnTable(Item toy)
         {
             var local = top.InverseTransformPoint(toy.Position);
             return local.y > -0.02f && Mathf.Abs(local.x) < TableSize.x / 2 && Mathf.Abs(local.z) < TableSize.z / 2;
-        }
-
-        // EPIC-010: one ring at a time onto the peg, the biggest that isn't there yet.
-        void PlayRings(Child c, float dt)
-        {
-            c.Act += dt;
-            if (c.Act < RingEverySeconds) return;
-            Item next = null;
-            foreach (var r in c.Toys)
-                if (r.Slot < 0 && r.Place == ItemPlace.Play && !r.Moving && (r.Body == null || r.Body.linearVelocity.magnitude < RestSpeed) && (next == null || r.Index < next.Index))
-                    next = r;
-            if (next == null) return;
-            c.Act = 0;
-            var height = TowerTop(c);
-            next.Body.isKinematic = true;
-            next.Slot = height;
-            next.MoveTo(RingStack(height), Quaternion.identity, 0.5f);
-            c.Figure.Wave(-20);
-        }
-
-        void PlayCar(Child c, float dt, float speed)
-        {
-            var car = c.Toys[0];
-            if (car.Moving) return;
-            car.Body.isKinematic = true;
-            if (c.Gliding)
-            {
-                // Back on the road at the nearest point before driving on.
-                c.Gliding = false;
-                c.RoadT = NearestRoadT(top.InverseTransformPoint(car.Position));
-                car.MoveTo(RoadPoint(c.RoadT, car.Ware), RoadRotation(c.RoadT), 0.5f);
-                return;
-            }
-            c.RoadT = Mathf.Repeat(c.RoadT + speed * dt / RoadLength, 1);
-            car.Transform.SetLocalPositionAndRotation(RoadPoint(c.RoadT, car.Ware), RoadRotation(c.RoadT));
-        }
-
-        static float RoadLength => Mathf.PI * (3 * (RoadRadii.x + RoadRadii.y) - Mathf.Sqrt((3 * RoadRadii.x + RoadRadii.y) * (RoadRadii.x + 3 * RoadRadii.y)));
-        static Quaternion RoadRotation(float t) => Quaternion.LookRotation(RoadPoint(t + 0.01f) - RoadPoint(t));
-
-        // EPIC-017: on the child's turn, one of its own blocks into the next free stable cell; then the player's turn.
-        void PlayBlocks(Child c)
-        {
-            if (!c.Site.ChildMayPlace) return;
-            var cell = c.Site.NextForChild();
-            if (cell < 0) return;
-            Item next = null;
-            foreach (var b in c.Toys)
-                if (IsChildsBlock(b.Index) && !c.PlayerTouched.Contains(b) && b.Slot < 0 && b.Place == ItemPlace.Play && !b.Moving
-                    && b.Body.linearVelocity.magnitude < RestSpeed && !Carries(c, b)) { next = b; break; }
-            if (next == null) return;
-            next.Body.isKinematic = true;
-            next.Slot = cell;
-            next.MoveTo(c.Site.Centre(cell), Quaternion.identity, 0.5f);
-            c.Site.Place(cell);
-            c.Site.ChildPlaced();
-            c.Figure.Wave(-20);
-        }
-
-        // Another block stands on this one (the child never pulls a block out from under another).
-        bool Carries(Child c, Item block)
-        {
-            var p = top.InverseTransformPoint(block.Position);
-            foreach (var o in c.Toys)
-            {
-                if (o == block || o.Place == ItemPlace.Held) continue;
-                var q = top.InverseTransformPoint(o.Position);
-                if (new Vector2(q.x - p.x, q.z - p.z).magnitude < Models.BlockSize * 0.9f && q.y > p.y + Models.BlockSize * 0.5f && q.y < p.y + Models.BlockSize * 1.5f) return true;
-            }
-            return false;
-        }
-
-        // EPIC-011: the blocks a released or returning block must keep clear of: all but itself, those in a hand and
-        // those gone (one rule for letting go and for coming home).
-        static List<Item> OtherBlocks(Child c, Item block) =>
-            c.Toys.FindAll(b => b != block && b.Place != ItemPlace.Held && b.Place != ItemPlace.Gone);
-
-        // EPIC-017: whatever stood on a block taken out of the build falls freely.
-        void TakeOutOfBuild(Child c, Item block)
-        {
-            if (block.Slot < 0 || c?.Site == null) return;
-            var fell = c.Site.Remove(block.Slot);
-            block.Slot = -1;
-            foreach (var b in c.Toys)
-                if (b != block && fell.Contains(b.Slot))
-                {
-                    b.Slot = -1;
-                    if (b.Place != ItemPlace.Held) b.Body.isKinematic = false;
-                }
-        }
-
-        static int TowerTop(Child c)
-        {
-            var n = 0;
-            foreach (var b in c.Toys) if (b.Slot >= 0) n = Mathf.Max(n, b.Slot + 1);
-            return n;
-        }
-
-        void Fetch(Child c, Item toy, Vector3 home)
-        {
-            c.Fetching = true;
-            toy.Body.isKinematic = true;
-            toy.MoveTo(home, Quaternion.identity, 0.6f);
-            toy.OnArrive = () =>
-            {
-                c.Fetching = false;
-                toy.Body.isKinematic = false;
-                toy.Body.linearVelocity = Vector3.zero;
-                c.Wait = 0;
-            };
         }
 
         // EPIC-011: one timer per piece (a shared one was reset every frame by the tower's fixed blocks or a held piece,
@@ -817,93 +489,29 @@ namespace Fruktstand.Game
             var c = ChildOf(toy.Ware);
             toy.StopTween();
             toy.OnArrive = null;
-            if (c != null)
-            {
-                c.Fetching = false;
-                c.SpinLeft = 0; // a top stops spinning in the hand
-                c.HoldLeft = 0; // EPIC-017: taken from the child's hands
-                if (toy.Ware == Ware.Ball) EndToss(c);
-                if (toy.Ware == Ware.Blocks) c.PlayerTouched.Add(toy); // EPIC-017: the child leaves it to the player
-                if (toy.Ware == Ware.Frogs) FrogTaken(c, toy);
-            }
             if (toy.Body != null)
             {
                 toy.Body.isKinematic = true;
                 toy.Body.detectCollisions = false; // EPIC-011: a toy in the hand never shoves the others
             }
-            if (toy.Ware == Ware.Blocks) TakeOutOfBuild(c, toy);
-            else if (toy.Ware == Ware.StackingRings && toy.Slot >= 0 && c != null)
-            {
-                // Taken off the peg: whatever stood on top of it falls freely.
-                foreach (var b in c.Toys)
-                    if (b != toy && b.Slot > toy.Slot) { b.Slot = -1; b.Body.isKinematic = false; }
-                toy.Slot = -1;
-            }
+            c?.Play.Taken(toy); // the child waits, a top stops, a stack loses what stood on it
         }
 
         public void PlayerReleased(PlayArea area, Item toy, Vector3 handVelocity)
         {
             toy.Place = ItemPlace.Play;
             if (toy.Body != null) toy.Body.detectCollisions = true;
-            var c = ChildOf(toy.Ware);
-            if (toy.Ware == Ware.Frogs && c?.Pond != null)
+            var play = ChildOf(toy.Ware)?.Play;
+            if (play != null && play.ReleasedInstead(toy)) // EPIC-018: frogs have no physics
             {
-                FrogReleased(c, toy); // EPIC-018: no physics, set down (or dropped) where the hand let go
                 area.PlayerReleased(toy.Ware);
                 return;
             }
             if (OnRoad(toy.Ware) || toy.Ware == Ware.Top) toy.Transform.rotation = Quaternion.Euler(0, toy.Transform.eulerAngles.y, 0); // lands upright
             var velocity = Vector3.ClampMagnitude(handVelocity, MaxThrowSpeed);
-            var cell = toy.Ware == Ware.Blocks && c?.Site != null ? c.Site.Snap(top.InverseTransformPoint(toy.Position)) : -1;
-            if (cell >= 0)
-            {
-                // EPIC-017: near the shared build: the nearest free stable cell, the player's own shape.
-                Debug.Log($"[Fruktstand] block built: cell {cell} (let go at {top.InverseTransformPoint(toy.Position):F3})");
-                toy.Transform.SetLocalPositionAndRotation(c.Site.Centre(cell), Quaternion.identity);
-                toy.Slot = cell;
-                c.Site.Place(cell);
-                c.Site.PlayerPlaced();
-            }
-            else if (toy.Ware == Ware.Blocks && c != null)
-            {
-                // EPIC-011: never left inside another block or the table (the physics engine would shoot it away).
-                var blocks = OtherBlocks(c, toy);
-                var others = blocks.ConvertAll(b => top.InverseTransformPoint(b.Position));
-                var r = BlockPlacement.Resolve(top.InverseTransformPoint(toy.Position), others, Models.BlockSize, TableHalf, toy.LastValid);
-                if (r.Kind != BlockPlacement.Kind.AsReleased)
-                {
-                    Debug.Log($"[Fruktstand] block placed: {r.Kind} at {r.Position:F3} (let go at {top.InverseTransformPoint(toy.Position):F3})");
-                    var yaw = r.Below >= 0 ? (Quaternion.Inverse(top.rotation) * blocks[r.Below].Transform.rotation).eulerAngles.y : toy.Transform.localEulerAngles.y;
-                    toy.Transform.SetLocalPositionAndRotation(r.Position, Quaternion.Euler(0, yaw, 0));
-                    velocity = Vector3.zero;
-                }
-            }
-            else if (toy.Slot < 0) LiftOntoTable(toy); // EPIC-011: the other toys, released partly inside the table
-            if (toy.Ware == Ware.Ball && c != null)
-            {
-                // EPIC-017: lifted and let go moving forward: a soft toss (to the child's hands, or along the movement).
-                var toss = BallToss.Plan(top.InverseTransformPoint(toy.Position), top.InverseTransformDirection(handVelocity), CatchPoint);
-                if (toss.Kind != BallToss.Kind.None)
-                {
-                    Debug.Log($"[Fruktstand] ball toss: {toss.Kind} to {toss.Target:F2} in {toss.Flight:F2} s (hand {handVelocity.magnitude:F2} m/s)");
-                    velocity = top.TransformDirection(toss.Velocity);
-                    c.Tossed = true;
-                    c.TossTime = 0;
-                    c.TossFlight = toss.Flight;
-                    toy.Body.linearDamping = 0;
-                }
-            }
-            if (toy.Ware == Ware.StackingRings && c != null)
-            {
-                // Generous help: a ring let go near the peg goes onto it, on top of the others.
-                var local = top.InverseTransformPoint(toy.Position);
-                if (new Vector2(local.x - RingSpot.x, local.z - RingSpot.z).magnitude < RingHelpRadius)
-                {
-                    toy.Slot = TowerTop(c);
-                    toy.Transform.SetLocalPositionAndRotation(RingStack(toy.Slot), Quaternion.identity);
-                    velocity = Vector3.zero;
-                }
-            }
+            var placed = play != null && play.Place(toy, ref velocity); // blocks: the build or a free place
+            if (!placed && toy.Slot < 0) LiftOntoTable(toy); // EPIC-011: released partly inside the table
+            play?.AfterPlace(toy, handVelocity, ref velocity); // a toss, a ring onto the peg
             if (toy.Body != null)
             {
                 toy.Body.isKinematic = toy.Slot >= 0;
@@ -936,10 +544,9 @@ namespace Fruktstand.Game
         public void Reset(PlayArea area, Item toy)
         {
             if (toy.Place == ItemPlace.Held) return;
-            var c = ChildOf(toy.Ware);
-            if (toy.Ware == Ware.Frogs && c?.Pond != null)
+            var play = ChildOf(toy.Ware)?.Play;
+            if (play != null && play.ResetInstead(area, toy)) // EPIC-018: a frog goes home its own way
             {
-                ResetFrog(c, (FrogOwner)toy.Index); // EPIC-018: home, sitting, any press undone
                 area.PlayerReleased(toy.Ware);
                 return;
             }
@@ -950,27 +557,11 @@ namespace Fruktstand.Game
                 toy.Body.isKinematic = true;
                 toy.Body.detectCollisions = true; // (it may come from a hand: focus lost)
             }
-            if (toy.Ware == Ware.Blocks) TakeOutOfBuild(c, toy);
-            else if (c != null && Stacks(toy.Ware))
-                foreach (var b in c.Toys) if (b != toy && b.Slot > toy.Slot && toy.Slot >= 0) { b.Slot = -1; if (b.Place != ItemPlace.Held) b.Body.isKinematic = false; }
+            play?.Unstack(toy);
             toy.Slot = -1;
-            if (c != null)
-            {
-                c.Fetching = false;
-                if (toy.Ware == Ware.Top) c.SpinLeft = 0;
-                if (toy.Ware == Ware.Ball)
-                {
-                    EndToss(c);
-                    c.HoldLeft = 0;
-                }
-            }
+            play?.Returning(toy);
             var home = Home(toy.Ware, toy.Index);
-            if (toy.Ware == Ware.Blocks && c != null)
-            {
-                // EPIC-011: its own place may be taken by another block: the nearest free spot (else its own place).
-                var others = OtherBlocks(c, toy).ConvertAll(b => top.InverseTransformPoint(b.Position));
-                home = BlockPlacement.NearestFree(home, others, Models.BlockSize, TableHalf) ?? home;
-            }
+            if (play != null) home = play.HomeFor(toy, home);
             toy.MoveTo(home, OnRoad(toy.Ware) ? RoadRotation(0.75f) : Quaternion.identity, 0.5f);
             toy.OnArrive = () =>
             {
@@ -981,7 +572,7 @@ namespace Fruktstand.Game
                     toy.Body.linearVelocity = Vector3.zero;
                     toy.Body.angularVelocity = Vector3.zero;
                 }
-                if (OnRoad(toy.Ware) && c != null) c.RoadT = 0.75f;
+                play?.HomeArrived();
                 if (area.Control(toy.Ware) == ToyControl.Free) area.ToyAtRest(toy.Ware);
             };
             area.PlayerReleased(toy.Ware);
@@ -995,7 +586,7 @@ namespace Fruktstand.Game
                 {
                     foreach (var t in c.Toys)
                         if (t.Place != ItemPlace.Held) Reset(area, t);
-                    c.PlayerTouched.RemoveWhere(t => t.Place != ItemPlace.Held); // EPIC-017: back in their owners' piles
+                    c.Play.Tidied();
                 }
         }
 
@@ -1013,9 +604,7 @@ namespace Fruktstand.Game
             if (c == null) return;
             foreach (var t in c.Toys) if (t.Place != ItemPlace.Held) Remove(t);
             if (c.Carried != null) Remove(c.Carried);
-            foreach (var r in c.Rear) if (r != null) items.Remove(r); // EPIC-018: the frogs' rears go with them
-            Art.Discard(c.PondParts);
-            Art.Discard(c.Peg);
+            c.Play.Removed();
             Art.Discard(c.Stool);
             Art.Discard(c.Root);
             children[s] = null;

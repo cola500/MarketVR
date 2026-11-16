@@ -10,8 +10,7 @@ Förbättringar som inte är påbörjade, i prioritetsordning. Från genomgånge
 1. **Mät det nuvarande bygget** med `scripts/quest.sh perf 120` under spel med kunder, besökare och tre lekande barn, när headsetet är ledigt. Optimera bara det som mätningen pekar ut.
    - Senaste mätningen (EPIC-013, 2026-11-02): 72,6 FPS i medel, minst 72, CPU/GPU-nivå högst 4/3.
    - EPIC-015–018 är inte mätta: gående kunder och besökare, bollkast, byggplats och grodor.
-2. **`PlayTableView`: en klass per leksak**, som grodorna redan har påbörjat (`PlayTableView.Frogs.cs`). I dag fördelas varje leksak via `switch` i sex metoder (`PutOnTable`, `Step`, `Play`, `PlayerTook`, `PlayerReleased`, `Reset`), och barnets tillstånd (`Child`) samlar fält för alla leksaker.
-3. **`FruitStand.Step` (108 rader):** dela upp i menyval, händer och logik för grepp och släpp (`OnGrab`, `Drop` och `SendHome`, som kan bli en egen testbar klass), tick och presentation.
+2. **`FruitStand.Step` (108 rader):** dela upp i menyval, händer och logik för grepp och släpp (`OnGrab`, `Drop` och `SendHome`, som kan bli en egen testbar klass), tick och presentation.
 
 ## Klart
 
@@ -31,3 +30,9 @@ Förbättringar som inte är påbörjade, i prioritetsordning. Från genomgånge
   - `PlaySequences` seedar parkbesökarnas val (`FruitStand.StrollRandom`), så att loggarna blir lika i varje körning.
   - Verifierat med två körningar: identiska loggar för alla tre sekvenserna. Boll och klossar är fortfarande lika med EPIC-017.
   - Kedjan finns i [TESTING.md](TESTING.md).
+- **`PlayTableView`: en klass per leksak** (2026-11-16, `c2890e5`).
+  - Varje leksak har en egen klass i en egen fil (`PlayTableView.<Leksak>.cs`): Ball, Top, Vehicle (bil och tåg), Rings, Blocks och Frogs. Klassen har sitt eget tillstånd, i stället för fält för alla leksaker på barnet.
+  - `PlayTableView` behåller det gemensamma flödet och anropar leksaken på samma ställen och i samma ordning som förut. Filen gick från 1 059 till 647 rader.
+  - Verifierat:
+    - `quest.sh test`: EditMode 257/257, PlayMode 112.
+    - `PlaySequences` (seedad): 3/3, alla tre loggarna identiska rad för rad med körningen före refaktoreringen.
