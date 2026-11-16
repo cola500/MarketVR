@@ -12,7 +12,6 @@ Förbättringar som inte är påbörjade, i prioritetsordning. Från genomgånge
    - EPIC-015–018 är inte mätta: gående kunder och besökare, bollkast, byggplats och grodor.
 2. **`PlayTableView`: en klass per leksak**, som grodorna redan har påbörjat (`PlayTableView.Frogs.cs`). I dag fördelas varje leksak via `switch` i sex metoder (`PutOnTable`, `Step`, `Play`, `PlayerTook`, `PlayerReleased`, `Reset`), och barnets tillstånd (`Child`) samlar fält för alla leksaker.
 3. **`FruitStand.Step` (108 rader):** dela upp i menyval, händer och logik för grepp och släpp (`OnGrab`, `Drop` och `SendHome`, som kan bli en egen testbar klass), tick och presentation.
-4. **Deterministisk grodsekvens.** `PlaySequences_Frogs` loggar tiden till grodbeställningen räknat från scenstart, och den varierar mellan körningar (62,75 s mot 85,84 s på samma kod). Allt efter beställningen är identiskt. Trolig orsak: parkbesökarnas val görs med oseedad slump (se [TESTING.md](TESTING.md)). Sätt `FruitStand.StrollRandom` till en seedad slump i `PlaySequences` och verifiera med två lika körningar. Sekvensens besökare ändras då, så det görs som en egen ändring.
 
 ## Klart
 
@@ -28,3 +27,7 @@ Förbättringar som inte är påbörjade, i prioritetsordning. Från genomgånge
     - `quest.sh test`: EditMode 257/257, PlayMode 112.
     - `quest.sh snapshots` (Snapshots och PlaySequences): 10/10.
     - Logg för boll och klossar identisk med EPIC-017.
+- **Deterministisk grodsekvens** (2026-11-16).
+  - `PlaySequences` seedar parkbesökarnas val (`FruitStand.StrollRandom`), så att loggarna blir lika i varje körning.
+  - Verifierat med två körningar: identiska loggar för alla tre sekvenserna. Boll och klossar är fortfarande lika med EPIC-017.
+  - Kedjan finns i [TESTING.md](TESTING.md).

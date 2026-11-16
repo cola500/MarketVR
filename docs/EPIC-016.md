@@ -144,3 +144,6 @@ klockan.
 **Installerat 2026-11-02 12:47** med förälderns klartecken. versionName verifierad på headsetet. Starten låg i kö bakom
 Horizon OS avstängningsdialog ("Launch is blocked because: a Reprojected OS dialog is currently showing"). Headsettestet
 (H1–H3) väntar.
+
+**Rent bygge:** `2026-11-02_125252_a12b617`, 24 MB, sha256 `eb461862…`, från commit `a12b617` (samma innehåll som
+`-dirty`-bygget ovan). Inte installerat ännu.

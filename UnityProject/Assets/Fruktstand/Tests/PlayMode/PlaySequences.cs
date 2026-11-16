@@ -17,6 +17,20 @@ namespace Fruktstand.Tests
     [Explicit, Category("PlaySequences")]
     public class PlaySequences
     {
+        // The park visitors choose with a seeded random, so a sequence's log is the same in every run (the customers
+        // keep their distance to the visitors, EPIC-016, so the visitors' choices decide when a customer arrives).
+        const int VisitorSeed = 2026;
+
+        [SetUp]
+        public void SeedVisitors()
+        {
+            var random = new System.Random(VisitorSeed);
+            FruitStand.StrollRandom = n => random.Next(n); // read when the scene loads (FruitStand.Awake)
+        }
+
+        [TearDown]
+        public void ResetVisitors() => FruitStand.StrollRandom = null;
+
         const float Dt = 1 / 72f;
         FruitStand s;
         readonly StringBuilder log = new();

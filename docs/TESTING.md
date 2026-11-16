@@ -66,6 +66,9 @@ Varje Unity-körning **vaktas**:
 1. **Varför en annan rad?** Beställningen kom vid 85,84 s i stället för 62,75 s.
    Belägg: två körningar på samma kod gav 85,84 s och 62,75 s, och alla rader efter beställningen var identiska.
 2. **Varför vid olika tid?** Själva leken är deterministisk, eftersom resten av loggen är lika. Bara tiden tills kunderna kommer fram varierar.
-3. **Varför varierar ankomsten?** *Hypotes, inte verifierad:* parkbesökarna väljer promenad, bänk eller utgång med `new System.Random()`. Den är oseedad i `FruitStand.Awake` om inte testet sätter `FruitStand.StrollRandom`. Kunderna väjer för besökarna (EPIC-016), så ankomsten tar olika lång tid. Det är den enda oseedade slumpen som påverkar kunderna (naturljuden och krokodilen gör det inte).
+3. **Varför varierar ankomsten?** *Verifierat (se nedan):* parkbesökarna väljer promenad, bänk eller utgång med `new System.Random()`. Den är oseedad i `FruitStand.Awake` om inte testet sätter `FruitStand.StrollRandom`. Kunderna väjer för besökarna (EPIC-016), så ankomsten tar olika lång tid. Det är den enda oseedade slumpen som påverkar kunderna (naturljuden och krokodilen gör det inte).
 4. **Varför syntes det inte förut?** Boll- och klossekvenserna nollställer klockan när leken börjar och loggar aldrig kundfasen. Grodsekvensen loggar beställningen räknat från scenstart.
-5. **Åtgärd:** refaktoreringen orsakade inte skillnaden, så den ändrades inte. Loggarna jämförs från raden efter beställningen. En seedad `StrollRandom` i sekvensen, med två lika körningar som verifiering, ligger i [BACKLOG.md](BACKLOG.md) punkt 4.
+5. **Åtgärd:** refaktoreringen orsakade inte skillnaden, så den ändrades inte.
+   - `PlaySequences` sätter nu `FruitStand.StrollRandom` till en seedad slump före varje sekvens och nollställer den efteråt.
+   - **Verifiering:** två körningar gav identiska loggar för alla tre sekvenserna, med grodbeställningen vid 85,84 s båda gångerna (oseedat: 62,75, 85,84 och 85,94 s). Hypotesen i steg 3 stämmer.
+   - Loggarna kan nu jämföras rad för rad, också första raden.
