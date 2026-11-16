@@ -92,3 +92,5 @@ Headset (H1, H2): ingen instruktion. Notera om spelaren trycker på bakdelen eft
 **Bygge:** `2026-11-16_103837_50befaf`, 24 MB, sha256 `2c6b9719…`, rent (från commit `50befaf`). Inte installerat: installation bara med förälderns klartecken. H1 och H2 väntar.
 
 **Installerat 2026-11-16 10:47** via USB med förälderns klartecken. versionName `1.0+2026-11-16_103837_50befaf` är verifierad på headsetet. Inte startat. H1 och H2 väntar.
+
+**Namnbyte till MarketVR, installerat 2026-11-16 11:09** via USB med förälderns klartecken: `2026-11-16_110759_1516b56` (rent, från commit `1516b56`; samma spel som ovan, appen heter nu MarketVR). versionName är verifierad på headsetet. Inte startat.

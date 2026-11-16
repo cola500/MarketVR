@@ -25,12 +25,8 @@ namespace Fruktstand.Tests
             yield return null;
         }
 
-        void Step(Vector3? right = null, bool grab = false, float dt = 0.02f, bool releaseAll = false)
-        {
-            var f = new ShopFrame { DeltaTime = dt, ReleaseAll = releaseAll };
-            if (right.HasValue) f.Right = new HandFrame { Tracked = true, Position = right.Value, Rotation = Quaternion.identity, Grab = grab };
-            s.Step(f);
-        }
+        void Step(Vector3? right = null, bool grab = false, float dt = 0.02f, bool releaseAll = false) =>
+            SceneSteps.Step(s, right, grab, dt, releaseAll);
 
         void Frame(ShopFrame f)
         {
@@ -38,10 +34,7 @@ namespace Fruktstand.Tests
             s.Step(f);
         }
 
-        void Wait(float seconds)
-        {
-            for (var t = 0f; t < seconds; t += 0.05f) Step(dt: 0.05f);
-        }
+        void Wait(float seconds) => SceneSteps.Wait(seconds, 0.05f, dt => Step(dt: dt));
 
         void WaitForOrdering()
         {

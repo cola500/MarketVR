@@ -26,10 +26,7 @@ namespace Fruktstand.Tests
             s.Step(f);
         }
 
-        void Wait(float seconds)
-        {
-            for (var t = 0f; t < seconds; t += 0.05f) s.Step(new ShopFrame { DeltaTime = 0.05f });
-        }
+        void Wait(float seconds) => SceneSteps.Wait(seconds, 0.05f, dt => SceneSteps.Step(s, null, false, dt));
 
         static string Parent(string cmd, string id) => $"{{\"t\":\"parent\",\"cmd\":\"{cmd}\",\"cmdId\":\"{id}\"}}";
 

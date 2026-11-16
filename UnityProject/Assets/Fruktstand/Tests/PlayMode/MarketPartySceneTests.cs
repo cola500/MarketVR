@@ -26,17 +26,9 @@ namespace Fruktstand.Tests
             yield return null;
         }
 
-        void Step(Vector3? right = null, bool grab = false, float dt = 0.05f)
-        {
-            var f = new ShopFrame { DeltaTime = dt };
-            if (right.HasValue) f.Right = new HandFrame { Tracked = true, Position = right.Value, Rotation = Quaternion.identity, Grab = grab };
-            s.Step(f);
-        }
+        void Step(Vector3? right = null, bool grab = false, float dt = 0.05f) => SceneSteps.Step(s, right, grab, dt);
 
-        void Wait(float seconds)
-        {
-            for (var t = 0f; t < seconds; t += 0.05f) Step();
-        }
+        void Wait(float seconds) => SceneSteps.Wait(seconds, 0.05f, dt => Step(dt: dt));
 
         void SellFirstCustomer()
         {

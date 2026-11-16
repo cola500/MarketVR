@@ -26,27 +26,13 @@ namespace Fruktstand.Tests
             Assert.IsNotNull(s);
         }
 
-        void Step(Vector3? right = null, bool grab = false, float dt = Dt, Quaternion? turn = null, bool releaseAll = false)
-        {
-            var f = new ShopFrame { DeltaTime = dt, ReleaseAll = releaseAll };
-            if (right.HasValue) f.Right = new HandFrame { Tracked = true, Position = right.Value, Rotation = turn ?? Quaternion.identity, Grab = grab };
-            s.Step(f);
-        }
+        void Step(Vector3? right = null, bool grab = false, float dt = Dt, Quaternion? turn = null, bool releaseAll = false) =>
+            SceneSteps.Step(s, right, grab, dt, releaseAll, turn);
 
-        void Wait(float seconds)
-        {
-            for (var t = 0f; t < seconds; t += 0.05f) Step(dt: 0.05f);
-        }
+        void Wait(float seconds) => SceneSteps.Wait(seconds, 0.05f, dt => Step(dt: dt));
 
-        bool WaitUntil(System.Func<bool> condition, float seconds)
-        {
-            for (var t = 0f; t < seconds; t += 0.05f)
-            {
-                if (condition()) return true;
-                Step(dt: 0.05f);
-            }
-            return condition();
-        }
+        bool WaitUntil(System.Func<bool> condition, float seconds) =>
+            SceneSteps.WaitUntil(condition, seconds, dt => Step(dt: dt));
 
         static string MeshOf(Transform t) => t.GetComponentInChildren<MeshFilter>()?.sharedMesh?.name;
 

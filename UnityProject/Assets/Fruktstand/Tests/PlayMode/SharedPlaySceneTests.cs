@@ -23,28 +23,18 @@ namespace Fruktstand.Tests
             Assert.IsNotNull(s);
         }
 
-        void Step(Vector3? right = null, bool grab = false, float dt = Dt, Matrix4x4? rig = null)
-        {
-            var f = new ShopFrame { DeltaTime = dt, RigDelta = rig };
-            if (right.HasValue) f.Right = new HandFrame { Tracked = true, Position = right.Value, Rotation = Quaternion.identity, Grab = grab };
-            s.Step(f);
-        }
+        void Step(Vector3? right = null, bool grab = false, float dt = Dt, Matrix4x4? rig = null) =>
+            SceneSteps.Step(s, right, grab, dt, rig: rig);
 
-        void Wait(float seconds)
-        {
-            for (var t = 0f; t < seconds; t += 0.05f) Step(dt: 0.05f);
-        }
+        void Wait(float seconds) => SceneSteps.Wait(seconds, 0.05f, dt => Step(dt: dt));
 
-        bool WaitUntil(System.Func<bool> condition, float seconds, System.Action each = null)
-        {
-            for (var t = 0f; t < seconds; t += 0.05f)
+        // `each` runs after every step (a test tracks the ball's lowest point while waiting).
+        bool WaitUntil(System.Func<bool> condition, float seconds, System.Action each = null) =>
+            SceneSteps.WaitUntil(condition, seconds, dt =>
             {
-                if (condition()) return true;
-                Step(dt: 0.05f);
+                Step(dt: dt);
                 each?.Invoke();
-            }
-            return condition();
-        }
+            });
 
         void SellToyAndWaitForPlay(Ware toy)
         {

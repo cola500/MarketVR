@@ -58,3 +58,14 @@ Varje Unity-körning **vaktas**:
 **Verifiering:** reprofallet (`Snapshots_NewFruit`, som hängde sig vid scenbyte nummer 2) gick igenom med synkron laddning. Hela sviten kördes sedan tre gånger i rad utan hängning (se EPIC-009, verifieringsloggen).
 
 **Gäller inte Quest:** `AssetChangedNotifier` finns bara i editorn, och spelet laddar bara en scen en gång. Dödläget är en testmiljöfråga.
+
+## 5 varför: grodsekvensens första loggrad varierade (2026-11-16, BACKLOG 2)
+
+**Problem:** efter att stegningen flyttats till `SceneSteps` skilde sig `PlaySequences_Frogs` från EPIC-018 på en enda rad: tiden när barnet beställer grodsetet.
+
+1. **Varför en annan rad?** Beställningen kom vid 85,84 s i stället för 62,75 s.
+   Belägg: två körningar på samma kod gav 85,84 s och 62,75 s, och alla rader efter beställningen var identiska.
+2. **Varför vid olika tid?** Själva leken är deterministisk, eftersom resten av loggen är lika. Bara tiden tills kunderna kommer fram varierar.
+3. **Varför varierar ankomsten?** *Hypotes, inte verifierad:* parkbesökarna väljer promenad, bänk eller utgång med `new System.Random()`. Den är oseedad i `FruitStand.Awake` om inte testet sätter `FruitStand.StrollRandom`. Kunderna väjer för besökarna (EPIC-016), så ankomsten tar olika lång tid. Det är den enda oseedade slumpen som påverkar kunderna (naturljuden och krokodilen gör det inte).
+4. **Varför syntes det inte förut?** Boll- och klossekvenserna nollställer klockan när leken börjar och loggar aldrig kundfasen. Grodsekvensen loggar beställningen räknat från scenstart.
+5. **Åtgärd:** refaktoreringen orsakade inte skillnaden, så den ändrades inte. Loggarna jämförs från raden efter beställningen. En seedad `StrollRandom` i sekvensen, med två lika körningar som verifiering, ligger i [BACKLOG.md](BACKLOG.md) punkt 4.
