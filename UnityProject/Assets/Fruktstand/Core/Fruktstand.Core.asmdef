@@ -1,0 +1,7 @@
+{
+  "name": "Fruktstand.Core",
+  "rootNamespace": "Fruktstand.Core",
+  "references": [],
+  "autoReferenced": true,
+  "noEngineReferences": false
+}

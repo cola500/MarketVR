@@ -1,0 +1,453 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Handla på marknaden</title>
+<style>
+  :root {
+    --bg: #fff8ec; --card: #ffffff; --fg: #2b2622; --muted: #75695e; --line: #eadfce;
+    --accent: #d9482b; --accent-fg: #fff; --ok: #2e7d32; --warn: #a86a00; --bad: #b23b3b; --chip: #f6efe3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1c1916; --card: #27231f; --fg: #f4eee5; --muted: #b3a798; --line: #3a342d;
+      --accent: #ff7a5c; --accent-fg: #1c1916; --ok: #7bd389; --warn: #ffc266; --bad: #ff8a80; --chip: #322c26; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 18px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+    padding: max(16px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); }
+  main { max-width: 520px; margin: 0 auto; }
+  h1 { font-size: 24px; margin: 4px 0 12px; }
+  h2 { font-size: 17px; margin: 0 0 10px; color: var(--muted); font-weight: 600; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 16px; margin-bottom: 14px; }
+  #status { display: flex; gap: 12px; align-items: center; }
+  #status .icon { font-size: 34px; width: 44px; text-align: center; }
+  #status .text { font-weight: 700; font-size: 20px; }
+  #status .sub { color: var(--muted); font-size: 15px; }
+  .s-ok .text { color: var(--ok); } .s-warn .text { color: var(--warn); } .s-bad .text { color: var(--bad); }
+  .wares { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .ware { position: relative; border: 2px solid var(--line); background: var(--chip); color: var(--fg); border-radius: 14px;
+    padding: 10px 4px 8px; font: inherit; text-align: center; cursor: pointer; }
+  .ware .e { font-size: 34px; display: block; }
+  .ware .n { font-size: 14px; display: block; }
+  .ware .p { font-size: 12px; color: var(--muted); }
+  .ware.on { border-color: var(--accent); }
+  .ware .count { position: absolute; top: -8px; right: -8px; background: var(--accent); color: var(--accent-fg); border-radius: 999px;
+    min-width: 26px; height: 26px; line-height: 26px; font-weight: 700; font-size: 15px; display: none; }
+  .ware.on .count { display: block; }
+  .ware:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; margin-top: 12px; flex-wrap: wrap; }
+  .sum { color: var(--muted); font-size: 16px; }
+  button.main { background: var(--accent); color: var(--accent-fg); border: 0; border-radius: 14px; padding: 14px 18px; font: inherit;
+    font-weight: 700; width: 100%; margin-top: 12px; cursor: pointer; }
+  button.main:disabled { opacity: .45; cursor: default; }
+  button.plain { background: none; border: 1px solid var(--line); color: var(--fg); border-radius: 10px; padding: 8px 12px; font: inherit; font-size: 15px; cursor: pointer; }
+  .photo { display: flex; gap: 14px; align-items: center; }
+  .photo .frame { width: 84px; height: 84px; border-radius: 12px; background: var(--chip); border: 1px solid var(--line);
+    display: grid; place-items: center; overflow: hidden; flex: none; font-size: 40px; }
+  .photo canvas { width: 84px; height: 84px; display: none; }
+  .photo .frame.has canvas { display: block; } .photo .frame.has span { display: none; }
+  .photo label { display: inline-block; }
+  .photo input { display: none; }
+  .muted { color: var(--muted); font-size: 15px; }
+  .err { color: var(--bad); font-size: 15px; min-height: 1em; margin-top: 8px; }
+  form#join input { font: inherit; font-size: 28px; letter-spacing: .2em; width: 8ch; text-align: center; padding: 8px; border-radius: 10px;
+    border: 1px solid var(--line); background: var(--chip); color: var(--fg); }
+  .hidden { display: none !important; }
+  details.parent { margin-top: 6px; }
+  details.parent summary { color: var(--muted); font-size: 15px; cursor: pointer; padding: 6px 0; }
+  details.parent .row button { flex: 1; }
+  #parentMsg { font-size: 15px; margin-top: 8px; min-height: 1em; }
+  #paused { text-align: center; font-weight: 700; color: var(--warn); }
+</style>
+</head>
+<body>
+<main>
+  <h1>🍎 Handla på marknaden</h1>
+
+  <section class="card" id="status" aria-live="polite">
+    <div class="icon" id="sIcon">⏳</div>
+    <div><div class="text" id="sText">Ansluter …</div><div class="sub" id="sSub"></div></div>
+  </section>
+
+  <form class="card hidden" id="join">
+    <h2>Sessionskod</h2>
+    <p class="muted">Koden står i terminalen eller på värdsidan på datorn.</p>
+    <input id="code" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]{4}" required>
+    <button class="main" type="submit">Anslut</button>
+  </form>
+
+  <section class="card hidden" id="paused" aria-live="polite">⏸️ Marknaden har paus. Beställ igen efter pausen.</section>
+
+  <section class="card" id="shop">
+    <h2>Vad vill du köpa?</h2>
+    <div class="wares" id="wares"></div>
+    <div class="row"><span class="sum" id="sum">Välj upp till 3 saker av samma sort.</span>
+      <button class="plain" id="clear" type="button">Rensa</button></div>
+    <button class="main" id="order" type="button" disabled>Beställ</button>
+    <div class="err" id="orderErr"></div>
+  </section>
+
+  <section class="card">
+    <h2>Ditt foto på kunden (valfritt)</h2>
+    <div class="photo">
+      <div class="frame" id="frame"><span>🙂</span><canvas id="preview" width="128" height="128"></canvas></div>
+      <div>
+        <label class="plain" for="file" style="padding:8px 12px;border:1px solid var(--line);border-radius:10px;cursor:pointer">Välj foto</label>
+        <input id="file" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif">
+        <button class="plain hidden" id="noPhoto" type="button">Inget foto</button>
+        <p class="muted">Bilden skalas ned till 128 × 128 på mobilen. Den finns bara i minnet under spelpasset och skickas inte till internet.</p>
+      </div>
+    </div>
+    <div class="err" id="photoErr"></div>
+  </section>
+  <details class="parent card" id="parent">
+    <summary>Förälder</summary>
+    <p class="muted">Pausa spelet eller starta nästa omgång. Det här är en praktisk föräldrakontroll, inte en barnspärr.</p>
+    <div class="row">
+      <button class="plain" id="pRest" type="button">Pausa spelet</button>
+      <button class="plain" id="pResume" type="button">Fortsätt spelet</button>
+      <button class="plain" id="pNext" type="button">Starta nästa omgång</button>
+    </div>
+    <div id="parentMsg" class="muted"></div>
+  </details>
+</main>
+
+<script>
+(() => {
+  'use strict';
+  // The phone only *asks*: order, photo, sync. The Quest decides and answers with status.
+  const WARES = [
+    { key: 'apple', name: 'äpple', e: '🍎', price: 1, cat: 'fruit' },
+    { key: 'banana', name: 'banan', e: '🍌', price: 1, cat: 'fruit' },
+    { key: 'carrot', name: 'morot', e: '🥕', price: 1, cat: 'fruit' },
+    { key: 'pear', name: 'päron', e: '🍐', price: 1, cat: 'fruit' },
+    { key: 'orange', name: 'apelsin', e: '🍊', price: 1, cat: 'fruit' },
+    { key: 'strawberry', name: 'jordgubbe', e: '🍓', price: 1, cat: 'fruit' },
+    { key: 'grapes', name: 'vindruvor', e: '🍇', price: 1, cat: 'fruit' },
+    { key: 'watermelon', name: 'vattenmelon', e: '🍉', price: 1, cat: 'fruit' },
+    { key: 'lollipop', name: 'klubba', e: '🍭', price: 1, cat: 'candy' },
+    { key: 'polkagris', name: 'polkagris', e: '🍬', price: 2, cat: 'candy' },
+    { key: 'candybag', name: 'godispåse', e: '🛍️', price: 3, cat: 'candy' },
+    { key: 'gummybear', name: 'gelébjörn', e: '🧸', price: 1, cat: 'candy' },
+    { key: 'chocolate', name: 'chokladkaka', e: '🍫', price: 3, cat: 'candy' },
+    { key: 'wrappedcandy', name: 'karamell', e: '🍬', price: 1, cat: 'candy' },
+    { key: 'rainbowstrip', name: 'regnbågsrem', e: '🌈', price: 2, cat: 'candy' },
+    { key: 'candyring', name: 'godisring', e: '💍', price: 2, cat: 'candy' },
+  ];
+  const MAX_ITEMS = 3, PHOTO_SIDE = 128, MAX_FILE_BYTES = 20 * 1024 * 1024;
+  const FORMATS = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+  const $ = (id) => document.getElementById(id);
+
+  const store = {
+    get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+    set(k, v) { try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+    sget(k) { try { return JSON.parse(sessionStorage.getItem(k)); } catch { return null; } },
+    sset(k, v) { try { v == null ? sessionStorage.removeItem(k) : sessionStorage.setItem(k, JSON.stringify(v)); } catch {} },
+  };
+  const randomId = () => [...crypto.getRandomValues(new Uint8Array(12))].map((b) => b.toString(16).padStart(2, '0')).join('');
+
+  const params = new URLSearchParams(location.search);
+  let code = params.get('k') || store.get('fs.code') || '';
+  let clientId = store.get('fs.client') || randomId(); store.set('fs.client', clientId);
+  let order = store.get('fs.order'); // { id, items, acked, state, reason }
+  let photo = store.sget('fs.photo'); // { id, w, h, rgba }
+  let market = 'playing';          // the Quest's own word: playing | party | resting
+  let restBy = '';                 // EPIC-012: child | parent | party while resting
+  // EPIC-009/010: what is on sale on the Quest (from its market status), per phone category
+  const onSale = { fruit: ['apple', 'banana', 'carrot'], candy: ['lollipop', 'polkagris', 'candybag'] };
+  let parentPending = null;         // { cmd, cmdId } sent, waiting for the Quest
+  let ws = null, phase = 'connecting', wsOpen = false, questOnline = false, retry = 0, resendTimer = null, lastQuestNews = '';
+  const basket = [];
+
+  // ---------- connection ----------
+  function connect() {
+    if (!/^[0-9]{4}$/.test(code)) { showJoin(); return; }
+    $('join').classList.add('hidden');
+    phase = 'connecting';
+    setStatus();
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    ws = new WebSocket(`${proto}://${location.host}/ws?role=phone&code=${code}&client=${clientId}`);
+    ws.onopen = () => { wsOpen = true; phase = 'open'; retry = 0; store.set('fs.code', code); render(); };
+    ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; } onMessage(m); };
+    ws.onclose = () => {
+      wsOpen = false; questOnline = false; ws = null; phase = 'closed';
+      if (parentPending) parentSay('Inte bekräftat – ingen anslutning till spelet.', true);
+      render();
+      if (!code) return; // wrong session code: wait for a new one
+      setTimeout(connect, Math.min(5000, 800 * ++retry));
+    };
+  }
+
+  function send(obj) { if (ws && wsOpen) ws.send(JSON.stringify(obj)); }
+
+  function onMessage(m) {
+    switch (m.t) {
+      case 'error':
+        if (m.reason === 'code') { store.set('fs.code', null); code = ''; lastQuestNews = 'Fel sessionskod.'; showJoin(); }
+        break;
+      case 'welcome':
+        questOnline = !!m.questOnline;
+        if (m.market) market = m.market;
+        setOnSale(m);
+        if (photo && m.photoId !== photo.id) sendPhoto();
+        catchUp();
+        break;
+      case 'quest':
+        questOnline = !!m.online;
+        if (!questOnline && parentPending) parentSay('Inte bekräftat – spelet är inte anslutet.', true);
+        if (questOnline) catchUp();
+        break;
+      case 'status':
+        if (!order || m.orderId !== order.id) break;
+        onStatus(m);
+        break;
+      case 'market':
+        market = m.state;
+        restBy = m.restBy || '';
+        setOnSale(m);
+        if (parentPending && done(parentPending.cmd)) {
+          parentSay(parentPending.cmd === 'rest' ? 'Spelet är pausat.' : parentPending.cmd === 'resume' ? 'Spelet fortsätter.' : 'Nästa omgång har startat.');
+          parentPending = null;
+        }
+        break;
+      case 'parentAck':
+        if (!parentPending || m.cmdId !== parentPending.cmdId) break;
+        if (!m.accepted) {
+          parentSay(parentPending.cmd === 'rest' ? 'Spelet kunde inte pausas just nu (pausen eller festen pågår kanske redan).'
+            : parentPending.cmd === 'resume' ? 'Efter festen: välj Starta nästa omgång.' : 'Nästa omgång går bara att starta under vilopausen.', true);
+          parentPending = null;
+        } else if (!done(parentPending.cmd)) {
+          parentSay('Mottaget av spelet …'); // "paused" only once the Quest's market status says so
+        }
+        break;
+    }
+    render();
+  }
+
+  // After (re)connecting: an order the Quest never confirmed is sent again (same id, so never twice);
+  // a confirmed one is only asked about.
+  function catchUp() {
+    if (!order || !questOnline) return;
+    if (!order.acked) sendOrder();
+    else send({ t: 'sync', orderId: order.id });
+  }
+
+  function onStatus(m) {
+    if (m.state === 'unknown') {
+      if (order.acked) finish('Spelet har startats om. Beställ gärna igen.');
+      else sendOrder();
+      return;
+    }
+    order.acked = true;
+    order.state = m.state;
+    order.reason = m.reason || '';
+    if (m.state === 'rejected') {
+      finish(m.reason === 'paused' ? 'Marknaden har paus. Beställ igen efter pausen.'
+        : m.reason === 'inactive' ? 'Den varan finns inte i ståndet just nu. Välj bland dem som visas.'
+        : m.reason === 'busy' ? 'Det finns redan en beställning från mobilen. Vänta tills den är klar.' : 'Den beställningen går inte. Välj 1–3 saker av samma sort.');
+      return;
+    }
+    if (m.state === 'cancelled') { finish('Spelaren startade ett nytt spel. Beställ gärna igen.'); return; }
+    store.set('fs.order', order);
+  }
+
+  function finish(message) {
+    $('orderErr').textContent = message;
+    order = null;
+    store.set('fs.order', null);
+  }
+
+  // ---------- order ----------
+  function sendOrder() {
+    send({ t: 'order', orderId: order.id, items: order.items, photoId: photo ? photo.id : '' });
+    clearTimeout(resendTimer);
+    resendTimer = setTimeout(() => { if (order && !order.acked) catchUp(); }, 3000);
+  }
+
+  function placeOrder() {
+    if (!basket.length || order) return;
+    $('orderErr').textContent = '';
+    order = { id: randomId(), items: basket.slice(), acked: false, state: 'sent' };
+    store.set('fs.order', order);
+    basket.length = 0;
+    if (photo) sendPhoto();
+    if (questOnline) sendOrder();
+    render();
+  }
+
+  function newOrder() {
+    order = null;
+    store.set('fs.order', null);
+    $('orderErr').textContent = '';
+    render();
+  }
+
+  // ---------- photo ----------
+  function sendPhoto() { if (photo) send({ t: 'photo', photoId: photo.id, w: photo.w, h: photo.h, rgba: photo.rgba }); }
+
+  async function pickPhoto(file) {
+    $('photoErr').textContent = '';
+    if (!file) return;
+    if (file.type && !FORMATS.includes(file.type)) { $('photoErr').textContent = 'Välj en JPEG-, PNG-, WebP- eller HEIC-bild.'; return; }
+    if (file.size > MAX_FILE_BYTES) { $('photoErr').textContent = 'Bilden är för stor (högst 20 MB).'; return; }
+    let img;
+    try { img = await loadImage(file); } catch { $('photoErr').textContent = 'Bilden gick inte att läsa. Prova en annan.'; return; }
+    const c = $('preview'), g = c.getContext('2d', { willReadFrequently: true });
+    const w = img.width, h = img.height, side = Math.min(w, h);
+    // Centre square, scaled down to 128 x 128: the only thing that ever leaves the phone.
+    g.clearRect(0, 0, PHOTO_SIDE, PHOTO_SIDE);
+    g.drawImage(img, (w - side) / 2, (h - side) / 2, side, side, 0, 0, PHOTO_SIDE, PHOTO_SIDE);
+    if (img.close) img.close();
+    const px = g.getImageData(0, 0, PHOTO_SIDE, PHOTO_SIDE).data;
+    for (let i = 3; i < px.length; i += 4) px[i] = 255; // no transparency
+    photo = { id: randomId(), w: PHOTO_SIDE, h: PHOTO_SIDE, rgba: toBase64(px) };
+    store.sset('fs.photo', photo);
+    sendPhoto();
+    render();
+  }
+
+  async function loadImage(file) {
+    if (window.createImageBitmap) {
+      try { return await createImageBitmap(file, { imageOrientation: 'from-image' }); } catch {}
+    }
+    const url = URL.createObjectURL(file);
+    try {
+      const img = new Image();
+      img.src = url;
+      await img.decode();
+      return img;
+    } finally { setTimeout(() => URL.revokeObjectURL(url), 1000); }
+  }
+
+  function toBase64(bytes) {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  }
+
+  function drawStoredPhoto() {
+    if (!photo) return;
+    try {
+      const bin = atob(photo.rgba), px = new Uint8ClampedArray(bin.length);
+      for (let i = 0; i < bin.length; i++) px[i] = bin.charCodeAt(i);
+      $('preview').getContext('2d').putImageData(new ImageData(px, photo.w, photo.h), 0, 0);
+    } catch { photo = null; store.sset('fs.photo', null); }
+  }
+
+  // ---------- view ----------
+  function setStatus() {
+    let icon = '⏳', text = 'Ansluter …', sub = '', cls = 's-warn';
+    if (phase === 'closed') { icon = '📵'; text = 'Frånkopplad'; sub = 'Försöker igen … Är mobilen på samma wifi som datorn?'; cls = 's-bad'; }
+    else if (phase === 'connecting') { icon = '⏳'; text = 'Ansluter …'; }
+    else if (!questOnline) { icon = '🔌'; text = 'Ansluten'; sub = 'Väntar på att spelet i Quest ansluter.'; cls = 's-warn'; }
+    else if (!order) { icon = '✅'; text = 'Ansluten'; sub = 'Välj vad du vill köpa.'; cls = 's-ok'; }
+    else if (order.state === 'done') { icon = '🎉'; text = 'Tack, köpet är klart!'; sub = 'Spelaren har tagit betalt.'; cls = 's-ok'; }
+    else if (order.state === 'serving') { icon = '🧺'; text = 'Beställning mottagen'; sub = 'Du står vid ståndet. Spelaren plockar och tar betalt.'; cls = 's-ok'; }
+    else if (order.state === 'waiting') { icon = '🕒'; text = 'Väntar på tur'; sub = 'Spelaren har en kund just nu. Du är näst på tur.'; cls = 's-warn'; }
+    else { icon = '📨'; text = 'Skickar beställningen …'; }
+    $('sIcon').textContent = icon; $('sText').textContent = text; $('sSub').textContent = sub;
+    $('status').className = 'card ' + cls;
+  }
+
+  function render() {
+    setStatus();
+    const busy = !!order;
+    for (const w of WARES) {
+      const b = document.querySelector(`[data-key="${w.key}"]`);
+      const n = basket.filter((k) => k === w.key).length;
+      b.classList.toggle('on', n > 0);
+      const list = onSale[w.cat];
+      b.classList.toggle('hidden', !list.includes(w.key));
+      b.style.order = (w.cat === 'fruit' ? 0 : 10) + list.indexOf(w.key);
+      b.querySelector('.count').textContent = n;
+      b.disabled = busy;
+    }
+    const total = basket.reduce((s, k) => s + WARES.find((w) => w.key === k).price, 0);
+    $('sum').textContent = busy ? (order.state === 'done' ? 'Köpet är klart.' : 'Beställningen är skickad.')
+      : basket.length ? `${basket.length} st · ${total} mynt` + (basket.length >= MAX_ITEMS ? ' (max)' : '') : 'Välj upp till 3 saker av samma sort.';
+    const btn = $('order');
+    if (busy && order.state === 'done') { btn.textContent = 'Handla igen'; btn.disabled = false; btn.onclick = newOrder; }
+    else { btn.textContent = 'Beställ'; btn.disabled = busy || !basket.length || !wsOpen || !questOnline || market !== 'playing'; btn.onclick = placeOrder; }
+    $('paused').classList.toggle('hidden', !(questOnline && market !== 'playing'));
+    // EPIC-012: pause while playing; continue a child's rest or a parent's pause; the next round in any rest.
+    $('pRest').classList.toggle('hidden', market !== 'playing');
+    $('pResume').classList.toggle('hidden', !(market === 'resting' && (restBy === 'child' || restBy === 'parent')));
+    $('pNext').classList.toggle('hidden', market !== 'resting');
+    $('paused').textContent = market === 'party' ? '🎉 Marknadsfest! Beställ igen efter pausen.'
+      : restBy === 'child' ? '⏸️ Spelaren vilar. Beställ igen efter pausen.'
+      : restBy === 'parent' ? '⏸️ Du har pausat spelet. Tryck Fortsätt spelet när ni vill.'
+      : '⏸️ Pausdags efter festen. Starta nästa omgång när ni vill.';
+    $('clear').disabled = busy || !basket.length;
+    $('frame').classList.toggle('has', !!photo);
+    $('noPhoto').classList.toggle('hidden', !photo);
+  }
+
+  // Only the wares on sale are shown, in the stall's order; a basket with something no longer on sale starts over.
+  function setOnSale(m) {
+    for (const cat of ['fruit', 'candy'])
+      if (Array.isArray(m[cat])) onSale[cat] = m[cat].filter((k) => WARES.some((w) => w.key === k && w.cat === cat));
+    if (!order && basket.some((k) => !onSale[WARES.find((w) => w.key === k).cat].includes(k))) basket.length = 0;
+    render();
+  }
+
+  function tap(key) {
+    if (order) return;
+    const w = WARES.find((x) => x.key === key);
+    if (basket.length && WARES.find((x) => x.key === basket[0]).cat !== w.cat) basket.length = 0;
+    if (basket.length >= MAX_ITEMS) return;
+    basket.push(key);
+    render();
+  }
+
+  // ---------- parent ----------
+  function parentSay(text, bad) {
+    $('parentMsg').textContent = text;
+    $('parentMsg').style.color = bad ? 'var(--bad)' : '';
+  }
+
+  // A parent command shows as done only once the Quest's market status says so.
+  function done(cmd) {
+    return (cmd === 'rest' && market === 'resting') || ((cmd === 'nextRound' || cmd === 'resume') && market === 'playing');
+  }
+
+  function parentCommand(cmd) {
+    // resume only continues the same game (nothing is lost): no question; the others are deliberate.
+    const question = cmd === 'rest' ? 'Pausa spelet? Marknaden stänger och spelaren får en vilopaus.' : cmd === 'nextRound' ? 'Starta nästa omgång? Kassan och stjärnorna finns kvar.' : null;
+    if (question && !window.confirm(question)) return; // an explicit confirmation
+    if (!ws || !wsOpen || !questOnline) { parentSay('Inte bekräftat – ingen anslutning till spelet.', true); return; }
+    parentPending = { cmd, cmdId: randomId() };
+    send({ t: 'parent', cmd, cmdId: parentPending.cmdId });
+    parentSay('Skickat – väntar på spelet …');
+  }
+
+  function showJoin() {
+    $('join').classList.remove('hidden');
+    $('code').value = code;
+    setStatus();
+    $('sText').textContent = lastQuestNews || 'Skriv sessionskoden';
+    $('sSub').textContent = 'Fyra siffror.';
+  }
+
+  for (const w of WARES) {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'ware'; b.dataset.key = w.key;
+    b.innerHTML = `<span class="count">0</span><span class="e">${w.e}</span><span class="n">${w.name}</span><span class="p">${w.price} mynt</span>`;
+    b.onclick = () => tap(w.key);
+    $('wares').appendChild(b);
+  }
+  $('clear').onclick = () => { basket.length = 0; render(); };
+  $('pRest').onclick = () => parentCommand('rest');
+  $('pNext').onclick = () => parentCommand('nextRound');
+  $('pResume').onclick = () => parentCommand('resume');
+  $('file').onchange = (e) => { pickPhoto(e.target.files[0]); e.target.value = ''; };
+  $('noPhoto').onclick = () => { photo = null; store.sset('fs.photo', null); $('preview').getContext('2d').clearRect(0, 0, PHOTO_SIDE, PHOTO_SIDE); render(); };
+  $('join').onsubmit = (e) => { e.preventDefault(); code = $('code').value.trim(); lastQuestNews = ''; connect(); };
+  if (order && order.state === 'done') order = null; // a finished order from an earlier visit is not shown again
+  drawStoredPhoto();
+  render();
+  connect();
+})();
+</script>
+</body>
+</html>

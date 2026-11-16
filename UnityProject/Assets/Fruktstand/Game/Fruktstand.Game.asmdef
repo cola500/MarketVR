@@ -1,0 +1,9 @@
+{
+  "name": "Fruktstand.Game",
+  "rootNamespace": "Fruktstand.Game",
+  "references": [
+    "Fruktstand.Core",
+    "Unity.XR.Oculus"
+  ],
+  "autoReferenced": true
+}

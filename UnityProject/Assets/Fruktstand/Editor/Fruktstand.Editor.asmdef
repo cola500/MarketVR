@@ -1,0 +1,6 @@
+{
+  "name": "Fruktstand.Editor",
+  "rootNamespace": "Fruktstand.EditorTools",
+  "references": ["Fruktstand.Core", "Fruktstand.Game", "Unity.XR.Management", "Unity.XR.Management.Editor", "Unity.XR.Oculus"],
+  "includePlatforms": ["Editor"]
+}

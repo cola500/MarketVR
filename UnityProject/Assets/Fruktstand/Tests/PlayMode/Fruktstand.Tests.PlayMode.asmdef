@@ -1,0 +1,8 @@
+{
+  "name": "Fruktstand.Tests.PlayMode",
+  "references": ["Fruktstand.Core", "Fruktstand.Game", "UnityEngine.TestRunner"],
+  "overrideReferences": true,
+  "precompiledReferences": ["nunit.framework.dll"],
+  "autoReferenced": false,
+  "defineConstraints": ["UNITY_INCLUDE_TESTS"]
+}

@@ -1,0 +1,24 @@
+.DS_Store
+UnityProject/Library/
+UnityProject/Temp/
+UnityProject/Logs/
+UnityProject/UserSettings/
+UnityProject/Builds/
+UnityProject/obj/
+UnityProject/*.csproj
+UnityProject/*.sln
+UnityProject/.utmp/
+UnityProject/build/
+*.keystore
+*.jks
+UnityProject/Assets/Fruktstand/Resources/BuildInfo.json*
+UnityProject/Assets/InitTestScene*
+*.blend1
+scripts/.quest-wifi
+
+# EPIC-013: Asset Store content (Low Poly Environment Park, Standard EULA) is not committed; scripts/park-assets.sh
+UnityProject/Assets/Palmov Island/
+UnityProject/Assets/Palmov Island.meta
+
+# Python byte code (art/*.py run by Blender)
+__pycache__/
